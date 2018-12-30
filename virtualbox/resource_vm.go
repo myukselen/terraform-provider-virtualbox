@@ -54,6 +54,12 @@ func resourceVM() *schema.Resource {
 				Optional: true,
 				ForceNew: true,
 			},
+			"guest_additions_installed": &schema.Schema{
+				Type:		schema.TypeBool,
+				Optional:	true,
+				Description: "If the provided image does not have guest additions installed set this to false",
+				Default:	true,
+			},
 			"optical_disks": &schema.Schema{
 				Type:        schema.TypeList,
 				Optional:    true,
@@ -472,6 +478,9 @@ func resourceVMDelete(d *schema.ResourceData, meta interface{}) error {
 /* Wait until VM is ready, and 'ready' means the first non NAT NIC get a ipv4_address assigned */
 func WaitUntilVMIsReady(d *schema.ResourceData, vm *vbox.Machine, meta interface{}) error {
 	var err error
+	if d.Get("guest_additions_installed").(bool) == false {  // We won't be able to read ipv4 address
+		return nil
+	}
 	for i, nic := range vm.NICs {
 		if nic.Network == vbox.NICNetNAT {
 			continue
@@ -622,8 +631,11 @@ func net_vbox_to_tf(vm *vbox.Machine, d *schema.ResourceData) error {
 		}
 	}
 
+	guest_additions_installed := d.Get("guest_additions_installed").(bool)
+	log.Printf("[DEBUG] Guest Additions installed: %+v\n", guest_additions_installed)
+
 	/* Collect NIC data from guest OS, available only when VM is running */
-	if vm.State == vbox.Running {
+	if vm.State == vbox.Running && guest_additions_installed == true {
 		/* NICs in guest OS (eth0, eth1, etc) does not neccessarily have save
 		order as in VirtualBox (nic1, nic2, etc), so we use MAC address to setup a mapping */
 		type OsNicData struct {
